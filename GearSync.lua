@@ -206,14 +206,32 @@ local function FormatStatName(statKey)
     return string.upper(string.sub(formatted, 1, 1)) .. string.sub(formatted, 2)
 end
 
--- Track last tooltip to avoid duplicate additions
-local lastTooltipItem = nil
+-- Track current tooltip item
+local currentTooltipItem = nil
+
+-- Hook tooltip SetHyperlink to track items
+local originalSetHyperlink = GameTooltip.SetHyperlink
+GameTooltip.SetHyperlink = function(self, link)
+    currentTooltipItem = link
+    return originalSetHyperlink(self, link, unpack(arg))
+end
+
+-- Hook other Set methods as needed
+local originalSetInventoryItem = GameTooltip.SetInventoryItem
+GameTooltip.SetInventoryItem = function(self, unit, slot)
+    local link = GetInventoryItemLink(unit, slot)
+    currentTooltipItem = link
+    return originalSetInventoryItem(self, unit, slot, unpack(arg))
+end
 
 -- Add upgrade data to tooltip
 local function AddUpgradeDataToTooltip(tooltip)
-    local _, itemLink = tooltip:GetItem()
-    if not itemLink then
-        lastTooltipItem = nil
+    if not currentTooltipItem then
+        return
+    end
+    
+    local itemLink = currentTooltipItem
+    if type(itemLink) ~= "string" then
         return
     end
 
@@ -224,10 +242,6 @@ local function AddUpgradeDataToTooltip(tooltip)
     local itemId = tonumber(itemIdStr)
     if not itemId then return end
 
-    -- Prevent duplicate additions
-    if lastTooltipItem == itemId then return end
-    lastTooltipItem = itemId
-
     -- Check if we have upgrade data for this item
     local upgrade = GearSyncUpgrades[itemId]
     if not upgrade then return end
@@ -236,7 +250,7 @@ local function AddUpgradeDataToTooltip(tooltip)
     tooltip:AddLine(" ")
     tooltip:AddLine("|cFF00BFFF⚔ TurtleLootLine:|r")
 
-    -- Display stats in order: stamina, armor, strength, agility, etc., then overall
+    -- Display stats in order
     local statsOrder = {
         "stamina", "armor", "strength", "agility", "intellect", "spirit",
         "defense", "attackPower", "spellPower", "healing", "hitRating",
@@ -252,64 +266,28 @@ local function AddUpgradeDataToTooltip(tooltip)
         end
     end
 
-    -- Overall stat (highlighted in gold)
+    -- Overall stat
     if upgrade.overall then
         local color = GetStatColor(upgrade.overall)
         tooltip:AddLine("  |cFFFFD700Overall: " .. color .. upgrade.overall .. "|r")
     end
 
-    -- Note (if available)
+    -- Note
     if upgrade.note then
         tooltip:AddLine("  |cFFAAAAAA" .. upgrade.note .. "|r")
     end
 
-    -- Refresh tooltip to update size
     tooltip:Show()
 end
 
--- Hook GameTooltip using OnUpdate (Vanilla 1.12 compatible)
-local tooltipUpdateDelay = 0
-local oldGameTooltipOnUpdate = GameTooltip:GetScript("OnUpdate")
-
-GameTooltip:SetScript("OnUpdate", function()
-    -- Call original OnUpdate if it exists
-    if oldGameTooltipOnUpdate then
-        oldGameTooltipOnUpdate()
-    end
-
-    -- Throttle updates to every 0.1 seconds
-    tooltipUpdateDelay = tooltipUpdateDelay + arg1
-    if tooltipUpdateDelay > 0.1 then
-        tooltipUpdateDelay = 0
-
-        -- Check if tooltip is visible and has item data
-        if this:IsVisible() then
-            AddUpgradeDataToTooltip(this)
-        else
-            lastTooltipItem = nil
-        end
-    end
+-- Hook GameTooltip OnShow
+GameTooltip:HookScript("OnShow", function()
+    AddUpgradeDataToTooltip(this)
 end)
 
--- Also hook ItemRefTooltip (for chat links)
-local itemRefUpdateDelay = 0
-local oldItemRefTooltipOnUpdate = ItemRefTooltip:GetScript("OnUpdate")
-
-ItemRefTooltip:SetScript("OnUpdate", function()
-    if oldItemRefTooltipOnUpdate then
-        oldItemRefTooltipOnUpdate()
-    end
-
-    itemRefUpdateDelay = itemRefUpdateDelay + arg1
-    if itemRefUpdateDelay > 0.1 then
-        itemRefUpdateDelay = 0
-
-        if this:IsVisible() then
-            AddUpgradeDataToTooltip(this)
-        else
-            lastTooltipItem = nil
-        end
-    end
+-- Clear tracking when tooltip hides
+GameTooltip:HookScript("OnHide", function()
+    currentTooltipItem = nil
 end)
 
 -- ============================================================================
