@@ -213,7 +213,7 @@ local currentTooltipItem = nil
 local originalSetHyperlink = GameTooltip.SetHyperlink
 GameTooltip.SetHyperlink = function(self, link)
     currentTooltipItem = link
-    return originalSetHyperlink(self, link, unpack(arg))
+    return originalSetHyperlink(self, link)
 end
 
 -- Hook other Set methods as needed
@@ -221,7 +221,7 @@ local originalSetInventoryItem = GameTooltip.SetInventoryItem
 GameTooltip.SetInventoryItem = function(self, unit, slot)
     local link = GetInventoryItemLink(unit, slot)
     currentTooltipItem = link
-    return originalSetInventoryItem(self, unit, slot, unpack(arg))
+    return originalSetInventoryItem(self, unit, slot)
 end
 
 -- Add upgrade data to tooltip
